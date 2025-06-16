@@ -25,7 +25,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import FormLabel from '@mui/material/FormLabel';
 import Checkbox from '@mui/material/Checkbox';
 import { Plugin, PluginChild } from "../../MapLibre/Plugin";
-import { DownloadIcon } from '../../../../components/Icons'
+import { DownloadIcon, VisibilityIcon } from '../../../../components/Icons'
 import CustomPopover from "../../../../components/CustomPopover";
 import { ThemeButton } from "../../../../components/Elements/Button";
 import { removeElement } from "../../../../utils/Array";
@@ -291,146 +291,156 @@ export default function DownloaderData() {
     return dynamicIndicatorsData;
   }
 
+  async function fetchData() {
+    // Get the data
+    const levelsUsed = levels.filter(level => state.levels.includes(level.level))
+    const indicatorValueByGeometry = {}
+
+    // The data
+    for (let i = 0; i < state.indicators.length; i++) {
+      const indicatorId = state.indicators[i]
+      const indicatorLayer = indicatorLayers.find(indicatorLayer => indicatorId === indicatorLayer.id)
+      // For indicator
+      if (indicatorLayer) {
+        // This is for dynamic layer
+        if (!indicatorLayer.indicators?.length && !indicatorLayer.related_tables?.length) {
+          const dynamicIndicatorsData = await dynamicLayerData(state.time, indicatorLayer)
+          // Create layer data
+          const output = {} // Output by concept uuid
+          fetchDynamicLayerData(
+            indicatorLayer, indicators, dynamicIndicatorsData, geoField,
+            error => {
+            },
+            response => {
+              response.map(row => {
+                row.indicator = indicatorLayer
+                if (!output[row.geom_id]) {
+                  output[row.geom_id] = []
+                }
+                output[row.geom_id].push(row)
+              })
+            },
+            true
+          )
+          indicatorValueByGeometry[indicatorLayer.id] = output
+        } else if (indicatorLayer.related_tables?.length) {
+          if (state.time !== TimeType.All) {
+            continue
+          }
+          const relatedTable = relatedTables.find(rt => rt.id === indicatorLayer.related_tables[0].id)
+          if (relatedTable) {
+            const params = {
+              geography_code_field_name: relatedTable.geography_code_field_name,
+              geography_code_type: relatedTable.geography_code_type,
+              country_geom_ids: countries
+            }
+            if (indicatorLayer.config.date_field) {
+              params.date_field = indicatorLayer.config.date_field
+            }
+            if (indicatorLayer.config.date_format) {
+              params.date_format = indicatorLayer.config.date_format
+            }
+            const url = `/api/v1/related-tables/${relatedTable.id}/geo-data/`
+            await fetchingData(
+              url, params, {}, function (response, error) {
+                if (!error) {
+                  const relatedTableData = {}
+                  relatedTableData[relatedTable.id] = {
+                    data: response,
+                    fetching: true,
+                    fetched: true
+                  }
+                  const { rows } = getRelatedTableData(
+                    response,
+                    {
+                      ...indicatorLayer.config,
+                      geography_code_field_name: relatedTable.geography_code_field_name
+                    },
+                    selectedGlobalTime,
+                    geoField,
+                    false
+                  )
+                  if (rows) {
+                    const output = {}
+                    rows.map(row => {
+                      row.geom_id = row.geometry_code
+                      row.indicator = indicatorLayer
+                      if (!output[row.geom_id]) {
+                        output[row.geom_id] = []
+                      }
+                      output[row.geom_id].push(row)
+                    })
+                    indicatorValueByGeometry[indicatorLayer.id] = output
+                  }
+                }
+              }
+            )
+          }
+        } else {
+          const output = {} // Output by concept uuid
+          for (let j = 0; j < indicatorLayer.indicators.length; j++) {
+            const indicator = indicatorLayer.indicators[j]
+            const response = await indicatorLayerData(state.time, indicator)
+            response.map(row => {
+              row.indicator = indicator
+              if (!output[row.geometry_code]) {
+                output[row.geometry_code] = []
+              }
+              output[row.geometry_code].push(row)
+            })
+          }
+          indicatorValueByGeometry[indicatorLayer.id] = output
+        }
+      }
+    }
+    return {levelsUsed, indicatorValueByGeometry};
+  }
+
+  async function prepareTableData(levelsUsed, indicatorValueByGeometry) {
+    // Get the geometries
+    const tableData = []
+    let geometries = []
+    for (const level of levelsUsed) {
+      let geometryData = await fetchFeatureList(level.url)
+      geometryData.sort((a, b) => (a.ucode > b.ucode) ? 1 : ((b.ucode > a.ucode) ? -1 : 0))
+      if (state.geographyFilter === GeographyFilter.Filtered) {
+        geometryData = geometryData.filter(geom => filteredGeometries.includes(extractCode(geom)))
+      }
+      geometries = geometries.concat(geometryData);
+    }
+
+    // Get every indicators selected
+    state.indicators.map(indicatorId => {
+      // Get per indicator layer
+      const indicatorLayer = indicatorLayers.find(indicatorLayer => indicatorId === indicatorLayer.id)
+      if (!indicatorLayer.indicators?.length && !indicatorLayer.related_tables?.length) {
+        cleanDataToExcel(tableData, geometries, indicatorLayer, indicatorLayer, indicatorValueByGeometry, false)
+      } else {
+        // For indicators
+        indicatorLayer.indicators.map(indicatorData => {
+          cleanDataToExcel(tableData, geometries, indicatorLayer, indicatorData, indicatorValueByGeometry, true)
+        })
+
+        // For related tables
+        indicatorLayer.related_tables.map(rt => {
+          cleanDataToExcel(tableData, geometries, indicatorLayer, rt, indicatorValueByGeometry, false)
+        })
+      }
+    })
+    return tableData;
+  }
+
   // Construct the data
   const download = () => {
     setDownloading(true);
     (
       async () => {
         // try {
-        // Get the data
-        const levelsUsed = levels.filter(level => state.levels.includes(level.level))
-        const indicatorValueByGeometry = {}
-
-        // The data
-        for (let i = 0; i < state.indicators.length; i++) {
-          const indicatorId = state.indicators[i]
-          const indicatorLayer = indicatorLayers.find(indicatorLayer => indicatorId === indicatorLayer.id)
-          // For indicator
-          if (indicatorLayer) {
-            // This is for dynamic layer
-            if (!indicatorLayer.indicators?.length && !indicatorLayer.related_tables?.length) {
-              const dynamicIndicatorsData = await dynamicLayerData(state.time, indicatorLayer)
-              // Create layer data
-              const output = {} // Output by concept uuid
-              fetchDynamicLayerData(
-                indicatorLayer, indicators, dynamicIndicatorsData, geoField,
-                error => {
-                },
-                response => {
-                  response.map(row => {
-                    row.indicator = indicatorLayer
-                    if (!output[row.geom_id]) {
-                      output[row.geom_id] = []
-                    }
-                    output[row.geom_id].push(row)
-                  })
-                },
-                true
-              )
-              indicatorValueByGeometry[indicatorLayer.id] = output
-            } else if (indicatorLayer.related_tables?.length) {
-              if (state.time !== TimeType.All) {
-                continue
-              }
-              const relatedTable = relatedTables.find(rt => rt.id === indicatorLayer.related_tables[0].id)
-              if (relatedTable) {
-                const params = {
-                  geography_code_field_name: relatedTable.geography_code_field_name,
-                  geography_code_type: relatedTable.geography_code_type,
-                  country_geom_ids: countries
-                }
-                if (indicatorLayer.config.date_field) {
-                  params.date_field = indicatorLayer.config.date_field
-                }
-                if (indicatorLayer.config.date_format) {
-                  params.date_format = indicatorLayer.config.date_format
-                }
-                const url = `/api/v1/related-tables/${relatedTable.id}/geo-data/`
-                await fetchingData(
-                  url, params, {}, function (response, error) {
-                    if (!error) {
-                      const relatedTableData = {}
-                      relatedTableData[relatedTable.id] = {
-                        data: response,
-                        fetching: true,
-                        fetched: true
-                      }
-                      const { rows } = getRelatedTableData(
-                        response,
-                        {
-                          ...indicatorLayer.config,
-                          geography_code_field_name: relatedTable.geography_code_field_name
-                        },
-                        selectedGlobalTime,
-                        geoField,
-                        false
-                      )
-                      if (rows) {
-                        const output = {}
-                        rows.map(row => {
-                          row.geom_id = row.geometry_code
-                          row.indicator = indicatorLayer
-                          if (!output[row.geom_id]) {
-                            output[row.geom_id] = []
-                          }
-                          output[row.geom_id].push(row)
-                        })
-                        indicatorValueByGeometry[indicatorLayer.id] = output
-                      }
-                    }
-                  }
-                )
-              }
-            } else {
-              const output = {} // Output by concept uuid
-              for (let j = 0; j < indicatorLayer.indicators.length; j++) {
-                const indicator = indicatorLayer.indicators[j]
-                const response = await indicatorLayerData(state.time, indicator)
-                response.map(row => {
-                  row.indicator = indicator
-                  if (!output[row.geometry_code]) {
-                    output[row.geometry_code] = []
-                  }
-                  output[row.geometry_code].push(row)
-                })
-              }
-              indicatorValueByGeometry[indicatorLayer.id] = output
-            }
-          }
-        }
+        const {levelsUsed, indicatorValueByGeometry} = await fetchData();
 
         // If excel
         if (state.format === Format.Excel) {
-          // Get the geometries
-          const tableData = []
-          let geometries = []
-          for (const level of levelsUsed) {
-            let geometryData = await fetchFeatureList(level.url)
-            geometryData.sort((a, b) => (a.ucode > b.ucode) ? 1 : ((b.ucode > a.ucode) ? -1 : 0))
-            if (state.geographyFilter === GeographyFilter.Filtered) {
-              geometryData = geometryData.filter(geom => filteredGeometries.includes(extractCode(geom)))
-            }
-            geometries = geometries.concat(geometryData);
-          }
-
-          // Get every indicators selected
-          state.indicators.map(indicatorId => {
-            // Get per indicator layer
-            const indicatorLayer = indicatorLayers.find(indicatorLayer => indicatorId === indicatorLayer.id)
-            if (!indicatorLayer.indicators?.length && !indicatorLayer.related_tables?.length) {
-              cleanDataToExcel(tableData, geometries, indicatorLayer, indicatorLayer, indicatorValueByGeometry, false)
-            } else {
-              // For indicators
-              indicatorLayer.indicators.map(indicatorData => {
-                cleanDataToExcel(tableData, geometries, indicatorLayer, indicatorData, indicatorValueByGeometry, true)
-              })
-
-              // For related tables
-              indicatorLayer.related_tables.map(rt => {
-                cleanDataToExcel(tableData, geometries, indicatorLayer, rt, indicatorValueByGeometry, false)
-              })
-            }
-          })
+          const tableData = await prepareTableData(levelsUsed, indicatorValueByGeometry);
           jsonToXlsx(tableData, name + '.xls')
         }
         // else if just geojson
@@ -484,6 +494,36 @@ export default function DownloaderData() {
         setDownloading(false);
       }
     )()
+  }
+
+  const preview = async () => {
+    setDownloading(true);
+    const {levelsUsed, indicatorValueByGeometry} = await fetchData();
+    const tableData = await prepareTableData(levelsUsed, indicatorValueByGeometry);
+
+    let csv = '';
+    if (tableData.length > 0) {
+      const keys = Object.keys(tableData[0]);
+      csv = [keys.join(','), ...tableData.map(r => keys.map(k => r[k]).join(','))].join('\n');
+    }
+    console.warn("TABLE DATA", tableData);
+    console.warn("CSV", csv);
+
+    // TODO We are loading directly from CDN though it's probably not the preferred way.
+    if (!window.previewInGrist) {
+      const script = document.createElement('script');
+      script.src = 'https://grist-static.com/csv-viewer.js';
+      script.async = true;
+      script.defer = true;
+      const loadedPromise = new Promise(resolve => script.addEventListener('load', resolve));
+      document.head.appendChild(script);
+      await loadedPromise;
+    }
+    window.previewInGrist({
+      initialContent: csv,
+      name: 'GeoSight Preview',
+    });
+    setDownloading(false);
   }
 
   return (
@@ -646,6 +686,14 @@ export default function DownloaderData() {
               >
                 {downloading ? <CircularProgress/> : <DownloadIcon/>}
                 {downloading ? "Downloading" : "Download"}
+              </ThemeButton>
+              <ThemeButton
+                disabled={disabled}
+                variant="primary Reverse"
+                onClick={() => { preview(); }}
+              >
+                {downloading ? <CircularProgress/> : <VisibilityIcon/>}
+                {downloading ? "Loading..." : "Preview"}
               </ThemeButton>
             </div>
           </div>

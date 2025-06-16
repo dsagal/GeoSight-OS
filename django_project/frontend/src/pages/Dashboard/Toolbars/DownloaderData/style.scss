@@ -74,8 +74,10 @@
   }
 
   .DownloadButton {
+    display: flex;
+    gap: 1rem;
     button {
-      width: 100%;
+      flex: auto;
     }
   }
 
