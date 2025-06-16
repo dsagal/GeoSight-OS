@@ -41,6 +41,9 @@ import { UpdateStyleData } from "../../../utils/indicatorData";
  * @param {dict} data Data of widget
  */
 export default function SummaryGroupWidgetView({ data }) {
+  const [sortField, setSortField] = useState('value');  // default to 'value'
+  const [sortOrder, setSortOrder] = useState('desc');   // default to descending
+
   const { config, type } = data
   const {
     layer_id, layer_used, property, date_filter_value

@@ -13,15 +13,13 @@
  * __copyright__ = ('Copyright 2025, Unicef')
  */
 
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { GridActionsCellItem } from "@mui/x-data-grid";
 import Tooltip from "@mui/material/Tooltip";
 import SystemUpdateAltIcon from '@mui/icons-material/SystemUpdateAlt';
 import { AdminListContent } from "../Content";
 import { COLUMNS_ACTION } from "../../../pages/Admin/Components/List";
-import {
-  BatchUserForm
-} from "../../../pages/Admin/UserAndGroup/Group/BatchUserForm";
+import { BatchUserForm } from "../../../pages/Admin/UserAndGroup/Group/BatchUserForm";
 import { DataAccessActiveIcon } from "../../Icons";
 
 export const groupUrl = {
@@ -29,75 +27,123 @@ export const groupUrl = {
   detail: '/api/v1/groups/0/?fields=__all__',
   edit: '/admin/group/0/edit',
   create: '/admin/group/create/',
-}
+};
 
 export function resourceActions(params) {
   const batchFormRef = useRef(null);
-  const actions = COLUMNS_ACTION(params, urls.admin.userAndGroupList + '#Users', groupUrl.edit, groupUrl.detail)
+  const actions = COLUMNS_ACTION(
+    params,
+    urls.admin.userAndGroupList + '#Users',
+    groupUrl.edit,
+    groupUrl.detail
+  );
 
   // Unshift before more & edit action
   actions.unshift(
-    <BatchUserForm ref={batchFormRef} data={params.row}/>,
+    <BatchUserForm ref={batchFormRef} data={params.row} />,
     <GridActionsCellItem
       icon={
         <Tooltip title={`Update user in batch.`}>
-          <a onClick={() => {
-            batchFormRef.current.open(params.row)
-          }}>
-            <div className='ButtonIcon'>
-              <SystemUpdateAltIcon/>
+          <a
+            onClick={() => {
+              batchFormRef.current.open(params.row);
+            }}
+          >
+            <div className="ButtonIcon">
+              <SystemUpdateAltIcon />
             </div>
           </a>
         </Tooltip>
       }
       label="Update user in batch."
     />
-  )
+  );
   return actions;
 }
 
 export function COLUMNS() {
   return [
-    { field: 'id', headerName: 'id', hide: true, width: 30, },
+    { field: 'id', headerName: 'id', hide: true, width: 30 },
     {
-      field: 'name', headerName: 'Name', flex: 1,
+      field: 'name',
+      headerName: 'Name',
+      flex: 1,
       renderCell: (params) => {
         if (groupUrl.edit) {
-          return <a className='MuiButtonLike CellLink'
-                    href={groupUrl.edit.replace('/0', `/${params.id}`)}>
-            {params.value}
-          </a>
+          return (
+            <a
+              className="MuiButtonLike CellLink"
+              href={groupUrl.edit.replace('/0', `/${params.id}`)}
+            >
+              {params.value}
+            </a>
+          );
         } else {
-          return params.value
+          return params.value;
         }
-      }
+      },
     },
     {
       field: 'actions',
       type: 'actions',
       width: 120,
       getActions: (params) => {
-        return resourceActions(params)
+        return resourceActions(params);
       },
-    }
-  ]
+    },
+  ];
 }
 
 /** Group List App */
 export function GroupList({ ...props }) {
-  return <AdminListContent
-    url={groupUrl}
-    title={'Groups'}
-    columns={COLUMNS()}
-    pageName={'Groups'}
-    multipleDelete={true}
-    defaults={{
-      sort: [
-        { field: 'name', sort: 'asc' }
-      ]
-    }}
-    {...props}
-  />
+  const [sortModel, setSortModel] = useState([
+    { field: 'name', sort: 'asc' },
+  ]);
+
+  return (
+    <>
+      <div style={{ marginBottom: '1rem' }}>
+        <label htmlFor="sortField">Sort By: </label>
+        <select
+          id="sortField"
+          value={sortModel[0].field}
+          onChange={(e) =>
+            setSortModel([
+              { field: e.target.value, sort: sortModel[0].sort },
+            ])
+          }
+        >
+          <option value="name">Name</option>
+          <option value="code">Code</option>
+          <option value="created_at">Created At</option>
+        </select>
+
+        <button
+          onClick={() =>
+            setSortModel((prev) => [
+              {
+                field: prev[0].field,
+                sort: prev[0].sort === 'asc' ? 'desc' : 'asc',
+              },
+            ])
+          }
+          style={{ marginLeft: '1rem' }}
+        >
+          Sort: {sortModel[0].sort === 'asc' ? '⬆️ Ascending' : '⬇️ Descending'}
+        </button>
+      </div>
+
+      <AdminListContent
+        url={groupUrl}
+        title={'Groups'}
+        columns={COLUMNS()}
+        pageName={'Groups'}
+        multipleDelete={true}
+        sortModel={sortModel}
+        {...props}
+      />
+    </>
+  );
 }
 
 export default GroupList;
