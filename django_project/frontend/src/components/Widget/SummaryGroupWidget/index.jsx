@@ -17,7 +17,7 @@
    GENERAL WIDGET FOR SHOWING SUMMARY OF DATA
    ========================================================================== */
 
-import React, { Fragment } from 'react';
+import React, { Fragment, useState } from 'react';
 import { useSelector } from "react-redux";
 import CircularProgress from "@mui/material/CircularProgress";
 
@@ -35,11 +35,27 @@ export default function Index(
 ) {
   const { name, config } = widgetData
   const { operation, property_2 } = config
+  const [useSmartFormat, setUseSmartFormat] = useState(false);
 
   const {
     referenceLayer
   } = useSelector(state => state.dashboard.data);
   const geometries = useSelector(state => state.datasetGeometries[referenceLayer?.identifier]);
+
+  function formatNumberSmart(num) {
+    if (num === null || num === undefined || isNaN(num)) return '';
+    const absNum = Math.abs(num);
+    if (absNum >= 1_000_000_000) {
+      return (num / 1_000_000_000).toFixed(2).replace(/\.00$/, '') + 'B';
+    }
+    if (absNum >= 1_000_000) {
+      return (num / 1_000_000).toFixed(2).replace(/\.00$/, '') + 'M';
+    }
+    if (absNum >= 1_000) {
+      return (num / 1_000).toFixed(2).replace(/\.00$/, '') + 'k';
+    }
+    return num.toString();
+  }
 
   /**
    * Return value of widget
@@ -97,17 +113,17 @@ export default function Index(
           });
           return <table>
             <tbody>
-            {
-              sorted.map((value, index) => (
-                <tr key={index} className='widget__sgw__row'>
-                  <td className='widget__sgw__row__name'>{value[0]}</td>
-                  <td>
-                    <div
-                      style={{ width: value[1].perc + '%' }}>{numberWithCommas(value[1].value)}</div>
-                  </td>
-                </tr>
-              ))
-            }
+             {
+                sorted.map((value, index) => (
+                  <tr key={index} className='widget__sgw__row'>
+                    <td className='widget__sgw__row__name'>{value[0]}</td>
+                    <td>
+                      <div
+                        style={{ width: value[1].perc + '%' }}>{useSmartFormat ? formatNumberSmart(value[1].value) : numberWithCommas(value[1].value)}</div>
+                    </td>
+                  </tr>
+                ))
+              }
             </tbody>
           </table>
         default:
@@ -115,7 +131,7 @@ export default function Index(
       }
     }
     return <div className='dashboard__right_side__loading'>
-      <CircularProgress/>
+      <CircularProgress />
     </div>
   }
 
@@ -124,6 +140,12 @@ export default function Index(
       <div className='widget__sw widget__sgw'>
         <div className='widget__title'>{name}</div>
         <div className='widget__content'>{getValue()}</div>
+        <div className='widget__sgw__toggle'>
+          <label>
+            <input type="checkbox" checked={useSmartFormat} onChange={() => setUseSmartFormat(!useSmartFormat)} />
+            Use Smart Format
+          </label>
+        </div>
       </div>
     </Fragment>
   )
