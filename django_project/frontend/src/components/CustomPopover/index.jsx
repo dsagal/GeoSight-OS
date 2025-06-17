@@ -17,10 +17,13 @@
    POPOVER
    ========================================================================== */
 
-import React, { Fragment, useState } from 'react';
+import React, { createContext, Fragment, useContext, useState } from 'react';
 import Popover from '@mui/material/Popover';
 
 import './style.scss';
+
+const PopoverCloseContext = createContext(() => {});
+export function usePopoverClose() { return useContext(PopoverCloseContext); }
 
 /**
  * Popover component
@@ -84,7 +87,9 @@ export default function CustomPopover(
         transformOrigin={transformOrigin}
         className={anchorOrigin.horizontal + (className ? ' ' + className : '')}
       >
-        {children}
+        <PopoverCloseContext.Provider value={handleClose}>
+          {children}
+        </PopoverCloseContext.Provider>
       </Popover>
     </Fragment>
   );

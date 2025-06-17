@@ -26,7 +26,7 @@ import FormLabel from '@mui/material/FormLabel';
 import Checkbox from '@mui/material/Checkbox';
 import { Plugin, PluginChild } from "../../MapLibre/Plugin";
 import { DownloadIcon, VisibilityIcon } from '../../../../components/Icons'
-import CustomPopover from "../../../../components/CustomPopover";
+import CustomPopover, {usePopoverClose} from "../../../../components/CustomPopover";
 import { ThemeButton } from "../../../../components/Elements/Button";
 import { removeElement } from "../../../../utils/Array";
 import { dictDeepCopy, jsonToXlsx } from "../../../../utils/main";
@@ -496,7 +496,7 @@ export default function DownloaderData() {
     )()
   }
 
-  const preview = async () => {
+  const preview = async (close) => {
     setDownloading(true);
     const {levelsUsed, indicatorValueByGeometry} = await fetchData();
     const tableData = await prepareTableData(levelsUsed, indicatorValueByGeometry);
@@ -506,8 +506,6 @@ export default function DownloaderData() {
       const keys = Object.keys(tableData[0]);
       csv = [keys.join(','), ...tableData.map(r => keys.map(k => r[k]).join(','))].join('\n');
     }
-    console.warn("TABLE DATA", tableData);
-    console.warn("CSV", csv);
 
     // TODO We are loading directly from CDN though it's probably not the preferred way.
     if (!window.previewInGrist) {
@@ -519,11 +517,174 @@ export default function DownloaderData() {
       document.head.appendChild(script);
       await loadedPromise;
     }
+    /*
+    const csvViewer = document.createElement('csv-viewer');
+    csvViewer.setAttribute('initial-file', 'https://grist-static.com/datasets/GeoSight%20Preview.grist');
+    csvViewer.setAttribute('initial-content', csv);
+    document.body.appendChild(csvViewer);
+    */
     window.previewInGrist({
+      // initialFile: 'https://grist-static.com/datasets/GeoSight%20Preview.grist',
       initialContent: csv,
       name: 'GeoSight Preview',
     });
     setDownloading(false);
+    close();
+  }
+
+  const PopoverContent = () => {
+    const close = usePopoverClose();
+    return (
+      <div
+        className={"DownloaderDataComponent " + (disabled ? "Disabled" : "")}
+      >
+        <div className='DownloaderDataTitle'>
+          <b className='light'>Download data from indicators</b>
+        </div>
+        <div className='DownloaderDataForm'>
+          <FormControlLabel
+            key={state.excludeEmptyValue} disabled={downloading}
+            control={
+              <Checkbox
+                checked={state.excludeEmptyValue}
+                onChange={evt => {
+                  setState({
+                    ...state,
+                    excludeEmptyValue: !state.excludeEmptyValue
+                  })
+                }}/>
+            }
+            label={"Exclude records without indicator values"}
+          />
+          <br/>
+          <br/>
+
+          {/* FOR ADMIN FILTER */}
+          <FormGroup className={'GroupSelection'}>
+            <FormLabel>Admin level</FormLabel>
+            <FormGroup>
+              {
+                levels ? levels.map(level => {
+                  return <FormControlLabel
+                    key={level.level} disabled={downloading}
+
+                    control={
+                      <Checkbox
+                        checked={state.levels.includes(level.level)}
+                        onChange={evt => {
+                          if (evt.target.checked) {
+                            addLevel(level.level)
+                          } else {
+                            removeLevel(level.level)
+                          }
+                        }}/>
+                    }
+                    label={level.level_name}
+                  />
+                }) : null
+              }
+            </FormGroup>
+          </FormGroup>
+          <Grid container spacing={2}>
+            <Grid item xs={6}>
+              <FormLabel>Geographical extent</FormLabel>
+              <SelectWithSearch
+                disableCloseOnSelect={false}
+                options={[GeographyFilter.All, GeographyFilter.Filtered]}
+                value={state.geographyFilter}
+                onChangeFn={(value) => {
+                  setState({ ...state, geographyFilter: value })
+                }}/>
+            </Grid>
+            <Grid item xs={6}>
+              <FormLabel>Format</FormLabel>
+              <SelectWithSearch
+                disableCloseOnSelect={false}
+                options={[Format.Geojson, Format.Excel]}
+                value={state.format}
+                onChangeFn={(value) => {
+                  setState({ ...state, format: value })
+                }}/>
+            </Grid>
+          </Grid>
+
+          {/* TIME */}
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <FormLabel>Time filter</FormLabel>
+              <SelectWithSearch
+                disableCloseOnSelect={false}
+                options={[TimeType.Current, TimeType.All]}
+                value={state.time}
+                onChangeFn={(value) => {
+                  setState({ ...state, time: value })
+                }}/>
+            </Grid>
+          </Grid>
+
+          {/* FOR INDICATORS FILTER */}
+          {indicatorLayers.length ? <table>
+            <thead>
+            <tr>
+              <td>
+                <Checkbox
+                  checked={JSON.stringify(indicatorLayersIds) === JSON.stringify(state.indicators)}
+                  onChange={evt => {
+                    if (evt.target.checked) {
+                      setState({
+                        ...state,
+                        indicators: indicatorLayersIds
+                      })
+                    } else {
+                      setState({ ...state, indicators: [] })
+                    }
+                  }}/>
+              </td>
+              <td>Indicator</td>
+            </tr>
+            </thead>
+            <tbody>
+            {
+              indicatorLayers.map(indicatorLayer => {
+                return <tr key={indicatorLayer.id}>
+                  <td>
+                    <Checkbox
+                      checked={state.indicators.includes(indicatorLayer.id)}
+                      onChange={evt => {
+                        if (evt.target.checked) {
+                          addIndicator(indicatorLayer.id)
+                        } else {
+                          removeIndicator(indicatorLayer.id)
+                        }
+                      }}/>
+                  </td>
+                  <td>{indicatorLayer.name}</td>
+                </tr>
+              })
+            }
+            </tbody>
+          </table> : null}
+        </div>
+        <div className='DownloadButton'>
+          <ThemeButton
+            disabled={disabled}
+            variant="primary Reverse"
+            onClick={download}
+          >
+            {downloading ? <CircularProgress/> : <DownloadIcon/>}
+            {downloading ? "Downloading" : "Download"}
+          </ThemeButton>
+          <ThemeButton
+            disabled={disabled}
+            variant="primary Reverse"
+            onClick={() => { preview(close); }}
+          >
+            {downloading ? <CircularProgress/> : <VisibilityIcon/>}
+            {downloading ? "Loading..." : "Preview"}
+          </ThemeButton>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -548,155 +709,7 @@ export default function DownloaderData() {
               </PluginChild>
             </div>
           }>
-          <div
-            className={"DownloaderDataComponent " + (disabled ? "Disabled" : "")}
-          >
-            <div className='DownloaderDataTitle'>
-              <b className='light'>Download data from indicators</b>
-            </div>
-            <div className='DownloaderDataForm'>
-              <FormControlLabel
-                key={state.excludeEmptyValue} disabled={downloading}
-                control={
-                  <Checkbox
-                    checked={state.excludeEmptyValue}
-                    onChange={evt => {
-                      setState({
-                        ...state,
-                        excludeEmptyValue: !state.excludeEmptyValue
-                      })
-                    }}/>
-                }
-                label={"Exclude records without indicator values"}
-              />
-              <br/>
-              <br/>
-
-              {/* FOR ADMIN FILTER */}
-              <FormGroup className={'GroupSelection'}>
-                <FormLabel>Admin level</FormLabel>
-                <FormGroup>
-                  {
-                    levels ? levels.map(level => {
-                      return <FormControlLabel
-                        key={level.level} disabled={downloading}
-
-                        control={
-                          <Checkbox
-                            checked={state.levels.includes(level.level)}
-                            onChange={evt => {
-                              if (evt.target.checked) {
-                                addLevel(level.level)
-                              } else {
-                                removeLevel(level.level)
-                              }
-                            }}/>
-                        }
-                        label={level.level_name}
-                      />
-                    }) : null
-                  }
-                </FormGroup>
-              </FormGroup>
-              <Grid container spacing={2}>
-                <Grid item xs={6}>
-                  <FormLabel>Geographical extent</FormLabel>
-                  <SelectWithSearch
-                    disableCloseOnSelect={false}
-                    options={[GeographyFilter.All, GeographyFilter.Filtered]}
-                    value={state.geographyFilter}
-                    onChangeFn={(value) => {
-                      setState({ ...state, geographyFilter: value })
-                    }}/>
-                </Grid>
-                <Grid item xs={6}>
-                  <FormLabel>Format</FormLabel>
-                  <SelectWithSearch
-                    disableCloseOnSelect={false}
-                    options={[Format.Geojson, Format.Excel]}
-                    value={state.format}
-                    onChangeFn={(value) => {
-                      setState({ ...state, format: value })
-                    }}/>
-                </Grid>
-              </Grid>
-
-              {/* TIME */}
-              <Grid container spacing={2}>
-                <Grid item xs={12}>
-                  <FormLabel>Time filter</FormLabel>
-                  <SelectWithSearch
-                    disableCloseOnSelect={false}
-                    options={[TimeType.Current, TimeType.All]}
-                    value={state.time}
-                    onChangeFn={(value) => {
-                      setState({ ...state, time: value })
-                    }}/>
-                </Grid>
-              </Grid>
-
-              {/* FOR INDICATORS FILTER */}
-              {indicatorLayers.length ? <table>
-                <thead>
-                <tr>
-                  <td>
-                    <Checkbox
-                      checked={JSON.stringify(indicatorLayersIds) === JSON.stringify(state.indicators)}
-                      onChange={evt => {
-                        if (evt.target.checked) {
-                          setState({
-                            ...state,
-                            indicators: indicatorLayersIds
-                          })
-                        } else {
-                          setState({ ...state, indicators: [] })
-                        }
-                      }}/>
-                  </td>
-                  <td>Indicator</td>
-                </tr>
-                </thead>
-                <tbody>
-                {
-                  indicatorLayers.map(indicatorLayer => {
-                    return <tr key={indicatorLayer.id}>
-                      <td>
-                        <Checkbox
-                          checked={state.indicators.includes(indicatorLayer.id)}
-                          onChange={evt => {
-                            if (evt.target.checked) {
-                              addIndicator(indicatorLayer.id)
-                            } else {
-                              removeIndicator(indicatorLayer.id)
-                            }
-                          }}/>
-                      </td>
-                      <td>{indicatorLayer.name}</td>
-                    </tr>
-                  })
-                }
-                </tbody>
-              </table> : null}
-            </div>
-            <div className='DownloadButton'>
-              <ThemeButton
-                disabled={disabled}
-                variant="primary Reverse"
-                onClick={download}
-              >
-                {downloading ? <CircularProgress/> : <DownloadIcon/>}
-                {downloading ? "Downloading" : "Download"}
-              </ThemeButton>
-              <ThemeButton
-                disabled={disabled}
-                variant="primary Reverse"
-                onClick={() => { preview(); }}
-              >
-                {downloading ? <CircularProgress/> : <VisibilityIcon/>}
-                {downloading ? "Loading..." : "Preview"}
-              </ThemeButton>
-            </div>
-          </div>
+          <PopoverContent />
         </CustomPopover>
       </div>
       <Notification ref={notificationRef}/>
