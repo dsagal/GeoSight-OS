@@ -57,7 +57,7 @@ export default function SummaryWidget(
       }
     }
     return <div className='dashboard__right_side__loading'>
-      <CircularProgress/>
+      <CircularProgress />
     </div>
   }
 
