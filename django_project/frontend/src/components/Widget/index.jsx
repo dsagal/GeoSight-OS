@@ -34,7 +34,12 @@ export const DEFINITION = {
     "TIME_SERIES_CHART_WIDGET": "TimeSeriesChartWidget",
   },
   "WidgetOperation": {
-    "SUM": "Sum"
+    "SUM": "Sum",
+    "MIN": "Min",
+    "MAX": "Max",
+    "AVG": "Avg",
+    "COUNT": "Count",
+    "COUNT_UNIQUE": "Count Unique"
   }
 }
 

@@ -64,6 +64,7 @@ export default function WidgetEditor(
   const [dateFilterValue, setDateFilterValue] = useState('');
   const [minDateFilter, setMinDateFilter] = useState(0)
   const [maxDateFilter, setMaxDateFilter] = useState(0)
+  const [topN, setTopN] = useState('');
 
   // On data Changed
   useEffect(() => {
@@ -82,6 +83,7 @@ export default function WidgetEditor(
     setLayerID(layer_id ? layer_id : '')
     setLayerType(layer_used ? layer_used : definition.WidgetLayerUsed.INDICATOR)
     setOperation(operation ? operation : DEFINITION.WidgetOperation.SUM)
+    setTopN(config.top_n || '');
     setUnit(unit ? unit : '')
     setProperty(property ? property : 'value')
     setDateFilterType(date_filter_type ? date_filter_type : 'No filter')
@@ -117,6 +119,7 @@ export default function WidgetEditor(
       layer_id: layerID,
       layer_used: layerType,
       operation: operation,
+      top_n: topN,
       unit: unit,
       property: property,
       date_filter_type: dateFilterType,
@@ -250,6 +253,23 @@ export default function WidgetEditor(
                 ))
               }
             </Select>
+          </FormControl>
+          <FormControl>
+            <InputLabel>Top N (optional)</InputLabel>
+            <Input
+              type="number"
+              inputProps={{ min: 1, max: 100 }}
+              placeholder="e.g., 5"
+              onChange={(event) => {
+                const val = parseInt(event.target.value);
+                if (isNaN(val) || val < 1) {
+                  setTopN('');
+                } else {
+                  setTopN(val);
+                }
+              }}
+              value={topN}
+            />
           </FormControl>
           <FormControl>
             <InputLabel>Source Value</InputLabel>

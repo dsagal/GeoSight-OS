@@ -46,77 +46,87 @@ export default function Index(
    * @returns {JSX.Element}
    */
   function getValue() {
-    if (data !== null && geometries) {
+    if (!data || !geometries) {
+      return (
+        <div className="dashboard__right_side__loading">
+          <CircularProgress />
+        </div>
+      );
+    }
+
+    let byGroup = {};
+
+    data.forEach((row) => {
+      let groupName = row[property_2];
+      const value = parseFloat(row.value);
+
+      if (property_2 === "geometry_code") {
+        for (const level of Object.values(geometries)) {
+          if (level[groupName]) {
+            groupName = level[groupName].label;
+          }
+        }
+      }
+
+      if (!byGroup[groupName]) {
+        byGroup[groupName] = [];
+      }
+
+      if (!isNaN(value)) {
+        byGroup[groupName].push(value);
+      }
+    });
+
+    const result = {};
+    for (const [group, values] of Object.entries(byGroup)) {
+      const total = values.reduce((a, b) => a + b, 0);
       switch (operation) {
         case DEFINITION.WidgetOperation.SUM:
-          let maxValue = 0;
-          let byGroup = {}
-          data.forEach(function (rowData) {
-            const rowValue = parseFloat(rowData.value);
-            let groupName = rowData[property_2];
-
-            // Change the name if geometry code
-            if (property_2 === 'geometry_code') {
-              // We need to check max value for all group
-              for (const [level, geometriesLevel] of Object.entries(geometries)) {
-                if (geometriesLevel[groupName]) {
-                  groupName = geometriesLevel[groupName].label;
-                }
-              }
-            }
-
-            if (!isNaN(rowValue)) {
-              if (!byGroup[groupName]) {
-                byGroup[groupName] = {
-                  value: 0,
-                  perc: 0
-                }
-              }
-              byGroup[groupName].value += parseFloat(rowData.value)
-            }
-          })
-
-          // We need to check max value for all group
-          for (const [key, value] of Object.entries(byGroup)) {
-            if (maxValue < value.value) {
-              maxValue = value.value
-            }
-          }
-
-          // Get percentage of values
-          for (const [key, value] of Object.entries(byGroup)) {
-            value.perc = ((value.value / maxValue) * 80) + 20;
-          }
-
-          // Sort group
-          var sorted = Object.keys(byGroup).map(function (key) {
-            return [key, byGroup[key]];
-          });
-          sorted.sort(function (first, second) {
-            return second[1].value - first[1].value;
-          });
-          return <table>
-            <tbody>
-            {
-              sorted.map((value, index) => (
-                <tr key={index} className='widget__sgw__row'>
-                  <td className='widget__sgw__row__name'>{value[0]}</td>
-                  <td>
-                    <div
-                      style={{ width: value[1].perc + '%' }}>{numberWithCommas(value[1].value)}</div>
-                  </td>
-                </tr>
-              ))
-            }
-            </tbody>
-          </table>
+          result[group] = total;
+          break;
+        case DEFINITION.WidgetOperation.MIN:
+          result[group] = Math.min(...values);
+          break;
+        case DEFINITION.WidgetOperation.MAX:
+          result[group] = Math.max(...values);
+          break;
+        case DEFINITION.WidgetOperation.AVG:
+          result[group] = values.length ? total / values.length : 0;
+          break;
+        case DEFINITION.WidgetOperation.COUNT:
+          result[group] = values.length;
+          break;
+        case DEFINITION.WidgetOperation.COUNT_UNIQUE:
+          result[group] = new Set(values).size;
+          break;
         default:
-          return <div className='widget__error'>Operation Not Found</div>;
+          return <div className="widget__error">Operation Not Found</div>;
       }
     }
-    return <div className='dashboard__right_side__loading'>
-      <CircularProgress/>
-    </div>
+
+    const sorted = Object.entries(result).sort((a, b) => b[1] - a[1]);
+
+    const topN = parseInt(config.top_n);
+    const limited = !isNaN(topN) && topN > 0 ? sorted.slice(0, topN) : sorted;
+
+    const maxVal = Math.max(...limited.map(([_, val]) => val), 1); // fallback = 1
+
+    return (
+      <table>
+        <tbody>
+          {limited.map(([key, val], index) => (
+            <tr key={index} className="widget__sgw__row">
+              <td className="widget__sgw__row__name">{key}</td>
+              <td>
+                <div style={{ width: `${(val / maxVal) * 80 + 20}%` }}>
+                  {numberWithCommas(val)}
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
   }
 
   return (
