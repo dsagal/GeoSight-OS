@@ -17,11 +17,11 @@
    GENERAL WIDGET FOR SHOWING SUMMARY OF DATA PER GROUP
    ========================================================================== */
 
-import React, { Fragment } from 'react';
+import React, { Fragment, useState } from 'react';
 import CircularProgress from "@mui/material/CircularProgress";
 
 import { DEFINITION } from "../index"
-import { numberWithCommas } from '../../../utils/main'
+
 
 /**
  * General widget to show summary of data.
@@ -34,6 +34,7 @@ export default function SummaryWidget(
 ) {
   const { name, config } = widgetData
   const { unit, operation } = config
+  const [useSmartFormat, setUseSmartFormat] = useState(false);
 
   /**
    * Return value of widget
@@ -50,13 +51,13 @@ export default function SummaryWidget(
               total += rowValue;
             }
           })
-          return <span>{numberWithCommas(total)} {unit}</span>
+          return <span>{useSmartFormat ? formatNumberSmart(total) : numberWithCommas(total)} {unit}</span>
         default:
           return <div className='widget__error'>Operation Not Found</div>;
       }
     }
     return <div className='dashboard__right_side__loading'>
-      <CircularProgress/>
+      <CircularProgress />
     </div>
   }
 
@@ -65,7 +66,32 @@ export default function SummaryWidget(
       <div className='widget__sw'>
         <div className='widget__title'>{name}</div>
         <div className='widget__sw__content'>{getValue()}</div>
+         <div className='widget__sw__toggle'>
+          <label>
+            <input type="checkbox" checked={useSmartFormat} onChange={() => setUseSmartFormat(!useSmartFormat)} />
+            Use Smart Format
+          </label>
+        </div>
       </div>
     </Fragment>
   )
+}
+
+function formatNumberSmart(num) {
+  if (num === null || num === undefined || isNaN(num)) return '';
+  const absNum = Math.abs(num);
+  if (absNum >= 1_000_000_000) {
+    return (num / 1_000_000_000).toFixed(2).replace(/\.00$/, '') + 'B';
+  }
+  if (absNum >= 1_000_000) {
+    return (num / 1_000_000).toFixed(2).replace(/\.00$/, '') + 'M';
+  }
+  if (absNum >= 1_000) {
+    return (num / 1_000).toFixed(2).replace(/\.00$/, '') + 'k';
+  }
+  return num.toString();
+}
+
+function numberWithCommas(x) {
+  return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
