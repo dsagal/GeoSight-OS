@@ -40,17 +40,59 @@ export default function SummaryWidget(
    * @returns {JSX.Element}
    */
   function getValue() {
-    if (data !== null) {
+    if (data !== null && Array.isArray(data)) {
+      const values = data
+        .map((d) => parseFloat(d.value))
+        .filter((v) => !isNaN(v));
+
+      const topN = parseInt(widgetData.config?.top_n);
+      const sortedValues = [...values].sort((a, b) => b - a);
+      const finalValues =
+        !isNaN(topN) && topN > 0 ? sortedValues.slice(0, topN) : values;
+
       switch (operation) {
         case DEFINITION.WidgetOperation.SUM:
-          let total = 0;
-          data.forEach(function (rowData) {
-            const rowValue = parseFloat(rowData.value);
-            if (!isNaN(rowValue)) {
-              total += rowValue;
-            }
-          })
-          return <span>{numberWithCommas(total)} {unit}</span>
+          const total = finalValues.reduce((acc, val) => acc + val, 0);
+          return (
+            <span>
+              {numberWithCommas(total)} {unit}
+            </span>
+          );
+
+        case DEFINITION.WidgetOperation.MIN:
+          const min = Math.min(...finalValues);
+          return (
+            <span>
+              {numberWithCommas(min)} {unit}
+            </span>
+          );
+
+        case DEFINITION.WidgetOperation.MAX:
+          const max = Math.max(...finalValues);
+          return (
+            <span>
+              {numberWithCommas(max)} {unit}
+            </span>
+          );
+
+        case DEFINITION.WidgetOperation.AVG:
+          const avg =
+            finalValues.length > 0
+              ? finalValues.reduce((a, b) => a + b, 0) / finalValues.length
+              : 0;
+          return (
+            <span>
+              {numberWithCommas(avg.toFixed(2))} {unit}
+            </span>
+          );
+
+        case DEFINITION.WidgetOperation.COUNT:
+          return <span>{values.length} items</span>;
+
+        case DEFINITION.WidgetOperation.COUNT_UNIQUE:
+          const uniqueCount = new Set(values).size;
+          return <span>{uniqueCount} unique</span>;
+
         default:
           return <div className='widget__error'>Operation Not Found</div>;
       }
